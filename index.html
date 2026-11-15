@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K線型態動畫</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 版面：單欄教學頁。上方切換六個型態，中間是K線圖與逐步說明，下方是這幾根K線的數字與六型態對照表。 */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --ink: #18212d;
+  --muted: #566274;
+  --line: #dbe1ea;
+  --grid: #e6eaf0;
+  --up: #d4332d;
+  --down: #2b3748;
+  --accent: #1d5bd1;
+  --accent-soft: #e3ecfb;
+  --warn-soft: #fdf0e1;
+  --warn-ink: #7a4a08;
+  --font: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141b; --surface: #171f2a; --ink: #e8edf4; --muted: #9aa6b8;
+    --line: #2a3443; --grid: #222c39; --up: #ff6a62; --down: #8496ae;
+    --accent: #78a8ff; --accent-soft: #1b2a45; --warn-soft: #2e2415; --warn-ink: #f0c98a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141b; --surface: #171f2a; --ink: #e8edf4; --muted: #9aa6b8;
+  --line: #2a3443; --grid: #222c39; --up: #ff6a62; --down: #8496ae;
+  --accent: #78a8ff; --accent-soft: #1b2a45; --warn-soft: #2e2415; --warn-ink: #f0c98a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font);
+  font-size: 16px; line-height: 1.65;
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-size: 1.6rem; line-height: 1.3; margin: 0; text-wrap: balance; }
+.lead { color: var(--muted); margin: 4px 0 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tab {
+  font: inherit; font-weight: 700; padding: 10px 4px; border-radius: 10px; cursor: pointer; min-width: 0;
+  background: var(--surface); color: var(--muted); border: 1px solid var(--line);
+}
+.tab small { display: block; font-weight: 400; font-size: .75rem; }
+.tab[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab:focus-visible, .btn:focus-visible, .end:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .85rem; color: var(--muted); margin-bottom: 8px; }
+.legend i { display: inline-block; width: 10px; height: 14px; border-radius: 2px; vertical-align: -2px; margin-right: 6px; }
+svg { display: block; width: 100%; height: auto; max-width: 100%; }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.ylabel { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.tag { fill: var(--ink); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ring { fill: var(--accent-soft); fill-opacity: .55; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.c.up { --col: var(--up); }
+.c.down { --col: var(--down); }
+.c line { stroke: var(--col); stroke-width: 1.6; }
+.c rect { fill: var(--col); stroke: var(--col); stroke-width: 1; }
+.enter { animation: pop .5s ease both; animation-delay: calc(var(--i) * 110ms); }
+@keyframes pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .enter { animation: none; } }
+.step-label { font-size: .85rem; color: var(--accent); font-weight: 700; margin: 0 0 2px; }
+.step-title { font-size: 1.15rem; font-weight: 700; margin: 0; text-wrap: balance; }
+.step-text { margin: 6px 0 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+.btn {
+  font: inherit; font-weight: 500; padding: 10px 16px; border-radius: 10px; cursor: pointer;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+}
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn:disabled { opacity: .4; cursor: default; }
+.dots { display: flex; gap: 6px; margin-left: auto; }
+.dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.dots span.on { background: var(--accent); }
+.ends { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.end {
+  font: inherit; font-size: .9rem; padding: 10px; border-radius: 10px; cursor: pointer; text-align: left;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+}
+.end[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.note { background: var(--warn-soft); color: var(--warn-ink); border-radius: 10px; padding: 10px 12px; margin: 12px 0 0; font-size: .95rem; }
+h2 { font-size: 1.05rem; margin: 0 0 8px; }
+table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; }
+th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+.fine { color: var(--muted); font-size: .85rem; margin: 0; }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>六個常見的 K 線型態，一步一步看</h1>
+    <p class="lead">先看前面的走勢，再看型態一根一根長出來，最後每個型態最後有一個實戰例子：看到它之後，買進價、停損價、買幾股，用數字算給你看。答錯會給提示。（每檔最多賠 2,000 元只是舉例）</p>
+  </header>
+
+  <div class="tabs" id="tabs" role="group" aria-label="選擇型態"></div>
+
+  <section class="card" aria-label="K線圖">
+    <div class="legend">
+      <span><i style="background:var(--up)"></i>紅K：收盤高於開盤</span>
+      <span><i style="background:var(--down)"></i>黑K：收盤低於開盤</span>
+      <span>單位：元（虛構數字）</span>
+    </div>
+    <svg id="chart" viewBox="0 0 360 280" role="img" aria-label="K線圖"></svg>
+  </section>
+
+  <section class="card" aria-live="polite">
+    <p class="step-label" id="stepLabel"></p>
+    <h2 class="step-title" id="stepTitle"></h2>
+    <p class="step-text" id="stepText"></p>
+    <div class="ends" id="guess" hidden style="grid-template-columns:1fr"></div>
+    <p class="note" id="hint" hidden></p>
+    <p class="fine" id="pairWrap" hidden style="margin-top:10px"><button class="btn" id="pair"></button></p>
+    <div class="ends" id="ends" hidden>
+      <button class="end" id="endA" aria-pressed="true"></button>
+      <button class="end" id="endB" aria-pressed="false"></button>
+    </div>
+    <p class="note" id="note" hidden></p>
+    <div class="controls">
+      <button class="btn" id="prev">上一步</button>
+      <button class="btn primary" id="play">播放</button>
+      <button class="btn" id="next">下一步</button>
+      <div class="dots" id="dots" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <section class="card" id="dataCard" hidden>
+    <h2 id="dataTitle">這幾根 K 線的數字</h2>
+    <div class="scroll">
+      <table>
+        <tbody id="dataBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>六個型態對照</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>型態</th><th>根數</th><th>出現在</th><th>長相</th><th>可能的意思</th></tr></thead>
+        <tbody>
+          <tr><th>鎚子線</th><td>1</td><td>下跌之後</td><td>小實體，長下影線</td><td>跌下去被拉回，可能止跌</td></tr>
+          <tr><th>吊人線</th><td>1</td><td>上漲之後</td><td>形狀同鎚子線</td><td>漲上去被賣回，可能見頂</td></tr>
+          <tr><th>晨星</th><td>3</td><td>下跌之後</td><td>長黑、往下跳空的小實體、長紅</td><td>賣壓減弱，可能止跌轉升</td></tr>
+          <tr><th>夜星</th><td>3</td><td>上漲之後</td><td>長紅、往上跳空的小實體、長黑</td><td>買盤減弱，可能見頂轉跌</td></tr>
+          <tr><th>母子線</th><td>2</td><td>一段走勢之後</td><td>大實體，加上完全包在裡面的小實體</td><td>原本的力道變小，可能轉向</td></tr>
+          <tr><th>平底</th><td>2</td><td>下跌之後</td><td>兩根的最低價相同</td><td>同一個價位擋住兩次，可能止跌</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fine" style="margin-top:10px">反過來也有對應的名字：上漲之後出現顏色相反的母子線，意思反過來；兩根最高價相同叫平頭。上影線長的形狀，上漲之後叫流星線，下跌之後叫倒錘子。各家對這些型態的定義略有差別，例如晨星的第二根是否一定要跳空、第三根要收到第一根實體多深。本頁採用比較嚴格的版本。</p>
+  </section>
+
+  <p class="fine">教學示範。圖中的價格都是虛構的，不構成買賣建議。型態只是線索，不能單獨下結論，要搭配前後的 K 線和成交量一起看。</p>
+</div>
+
+<script>
+(function () {
+  // 每根K線：[開, 收, 高, 低]
+  function f1(x) { return x.toFixed(1); }
+  function f2(x) { return (Math.round(x * 100) / 100).toString(); }
+  function mid(c) { return (c[0] + c[1]) / 2; }
+  function body(c) { return Math.abs(c[1] - c[0]); }
+  function topB(c) { return Math.max(c[0], c[1]); }
+  function botB(c) { return Math.min(c[0], c[1]); }
+  function hrow(c) { return [['開盤', f1(c[0]) + ' 元'], ['收盤', f1(c[1]) + ' 元'], ['最高', f1(c[2]) + ' 元'], ['最低', f1(c[3]) + ' 元']]; }
+
+  function hammerChecks(k) {
+    var c = k[0], b = body(c), lo = botB(c) - c[3], up = c[2] - topB(c), r = lo / b;
+    return hrow(c).concat([
+      ['實體', f1(c[1]) + ' − ' + f1(c[0]) + ' ＝ ' + f1(b) + ' 元'],
+      ['下影線', f1(botB(c)) + ' − ' + f1(c[3]) + ' ＝ ' + f1(lo) + ' 元（從實體下緣量起）'],
+      ['上影線', f1(c[2]) + ' − ' + f1(topB(c)) + ' ＝ ' + f1(up) + ' 元'],
+      ['下影線 ÷ 實體', f1(lo) + ' ÷ ' + f1(b) + ' ＝ ' + f1(r) + ' 倍，超過兩倍，上影線很短，符合外形']
+    ]);
+  }
+
+  var SCENES = {
+    hammer: {
+      tab: '鎚子線', sub: '一根・下跌後', trend: '下跌', name: '鎚子線',
+      pre: [[46.0,45.2,46.2,45.0],[45.2,44.1,45.3,44.0],[44.1,43.2,44.3,43.0],[43.2,42.0,43.3,41.8],[42.0,41.0,42.1,40.8],[41.0,40.1,41.1,39.9]],
+      key: [[40.0,40.4,40.5,38.6]], tags: true,
+      endA: [[40.5,41.6,41.8,40.4],[41.6,42.3,42.5,41.5]],
+      endB: [[40.2,39.1,40.3,38.9],[39.1,38.0,39.2,37.8]],
+      labelA: '走法A：後面兩天上漲', labelB: '走法B：後面兩天繼續跌',
+      textA: '後面兩天收紅、價格回升，這次的線索對了。',
+      textB: '後面兩天繼續收黑、價格再往下，這次的線索沒有用。',
+      keyTexts: [{ t: '接著出現這一根', x: '盤中被壓到 38.6 元，收盤又被拉回 40.4 元。實體很小，下影線很長。' }],
+      nameTitle: '它出現在下跌之後，所以叫鎚子線',
+      nameText: '下影線長，代表「跌下去，又被買回來」。出現在一段下跌之後，是可能止跌的線索，不是保證。',
+      quiz: {"q": "鎚子線出現的隔天，價格站上它的最高價 40.5，你以 40.6 買進。停損價放哪裡最合理？", "o": ["40.0（離買進價很近）", "38.6（鎚子線的最低點）", "32.0（跌兩成才賣）"], "a": 1, "hint": "提示：鎚子線的意思是「38.6 有人接」。價格跌破 38.6，這個線索就失效了。", "fb": ["離買進價只有 0.6 元，一般的上下震盪就會被洗出場。", null, "距離 8.6 元太遠。每檔最多賠 2,000 元的話，只能買 232 股；真的跌到那裡，已經虧兩成了。"], "right": "對。買 40.6、停損 38.6，每股最多賠 2.0 元。每檔最多賠 2,000 元：2,000 ÷ 2.0 ＝ 1,000 股，剛好 1 張。注意：不是看到鎚子線當天買，是隔天站上最高價才買。", "lines": [[40.6, "買 40.6"], [38.6, "停損 38.6"]]},
+      dataTitle: '這根 K 線的數字', checks: hammerChecks
+    },
+    hang: {
+      tab: '吊人線', sub: '一根・上漲後', trend: '上漲', name: '吊人線',
+      pre: [[30.0,30.9,31.0,29.9],[30.9,32.0,32.1,30.8],[32.0,33.1,33.2,31.9],[33.1,34.2,34.3,33.0],[34.2,35.4,35.5,34.1],[35.4,36.5,36.6,35.3]],
+      key: [[36.5,36.9,37.0,35.1]], tags: true,
+      endA: [[36.8,35.6,36.9,35.4],[35.5,34.4,35.6,34.2]],
+      endB: [[37.0,38.1,38.3,36.9],[38.1,39.0,39.1,38.0]],
+      labelA: '走法A：後面兩天下跌', labelB: '走法B：後面兩天繼續漲',
+      textA: '後面兩天收黑、價格回落，這次的警訊對了。',
+      textB: '後面兩天繼續收紅、價格再往上，這次的警訊沒有用。',
+      keyTexts: [{ t: '接著出現這一根', x: '盤中被賣到 35.1 元，收盤又被拉回 36.9 元。形狀和鎚子線一模一樣，數字的比例也相同。' }],
+      nameTitle: '它出現在上漲之後，所以叫吊人線',
+      nameText: '下影線長，代表「盤中出現很大的賣壓」。出現在一段上漲之後，是可能見頂的警訊，不是保證。',
+      quiz: {"q": "你手上有 1,000 股。吊人線出現了（最高 37.0、最低 35.1）。你怎麼處理最合理？", "o": ["馬上全部賣掉", "停利設在吊人線最低價 35.1 之下，跌破才賣", "加碼，因為收盤有拉回來"], "a": 1, "hint": "提示：吊人線只是警訊，不是結論。讓價格自己告訴你要不要賣。", "fb": ["吊人線不保證下跌，隔天可能繼續漲，全賣太急。", null, "吊人線出現在漲勢之後，這時加碼風險變大。"], "right": "對。把停利設在 35.1：跌破，代表賣壓真的壓下來，就賣；沒跌破，就繼續持有。不用猜，用價位決定。", "lines": [[35.1, "停利 35.1"]]},
+      dataTitle: '這根 K 線的數字', checks: hammerChecks
+    },
+    morning: {
+      tab: '晨星', sub: '三根・下跌後', trend: '下跌', name: '晨星',
+      pre: [[52.0,51.0,52.2,50.8],[51.0,49.8,51.1,49.6],[49.8,48.9,49.9,48.7],[48.9,47.9,49.0,47.7]],
+      key: [[47.9,45.4,48.0,45.2],[44.9,44.7,45.1,44.4],[45.2,47.4,47.6,45.0]],
+      endA: [[47.6,48.6,48.8,47.4],[48.6,49.5,49.7,48.5]],
+      endB: [[47.3,46.0,47.5,45.8],[46.0,44.7,46.1,44.5]],
+      labelA: '走法A：後面兩天上漲', labelB: '走法B：後面兩天又跌回去',
+      textA: '後面兩天繼續收紅，價格站穩，這次的線索對了。',
+      textB: '後面兩天收黑，價格又跌回晨星的最低點附近，這次的線索沒有用。',
+      keyTexts: [
+        { t: '第一根：長黑K', x: '一天跌了 2.5 元（47.9 到 45.4），賣方很強，是下跌的延續。' },
+        { t: '第二根：往下跳空的小實體', x: '開盤直接低於昨天收盤，整根都在昨天的最低價 45.2 之下，但實體只有 0.2 元。賣方還在，可是推不動了。' },
+        { t: '第三根：長紅K', x: '收在 47.4 元，超過第一根實體的中點 46.65，把前面兩天的跌幅拉回一大半。' }
+      ],
+      nameTitle: '三根合起來，叫晨星',
+      nameText: '像天亮之前最亮的那顆星。出現在一段下跌之後，是可能止跌轉升的線索，不是保證。',
+      quiz: {"q": "晨星的第三根收紅之後，隔天價格站上它的最高價 47.6，你以 47.7 買進。停損價放哪裡最合理？", "o": ["46.65（第一根實體的中點）", "44.4（晨星中間那顆星的最低點）", "47.0（買進價下方一點點）"], "a": 1, "hint": "提示：晨星的意思是「44.4 附近賣壓停了」。跌破這裡，型態就失敗了。", "fb": ["中點是用來判斷型態的線，不是失效的位置。放在這裡，容易太早被洗出場。", null, "離買進價只有 0.7 元，一般的上下震盪就會碰到。"], "right": "對。買 47.7、停損 44.4，每股最多賠 3.3 元。每檔最多賠 2,000 元：2,000 ÷ 3.3 ＝ 606 股，約 0.6 張（零股）。", "lines": [[47.7, "買 47.7"], [44.4, "停損 44.4"]]},
+      dataTitle: '這三根 K 線的數字',
+      checks: function (k) {
+        var a = k[0], b = k[1], c = k[2], m = mid(a);
+        return [
+          ['第一根（長黑）', '開 ' + f1(a[0]) + '、收 ' + f1(a[1]) + '，實體 ' + f1(body(a)) + ' 元'],
+          ['第二根（小實體）', '開 ' + f1(b[0]) + '、收 ' + f1(b[1]) + '，實體 ' + f1(body(b)) + ' 元'],
+          ['有沒有往下跳空', '第二根最高 ' + f1(b[2]) + ' 元，低於第一根最低 ' + f1(a[3]) + ' 元，所以整根都在下面'],
+          ['第三根（長紅）', '開 ' + f1(c[0]) + '、收 ' + f1(c[1]) + '，實體 ' + f1(body(c)) + ' 元'],
+          ['第一根實體的中點', '(' + f1(a[0]) + ' ＋ ' + f1(a[1]) + ') ÷ 2 ＝ ' + f2(m) + ' 元'],
+          ['第三根收在哪', f1(c[1]) + ' 元，高於中點 ' + f2(m) + ' 元，收進第一根實體的一半以上']
+        ];
+      }
+    },
+    evening: {
+      tab: '夜星', sub: '三根・上漲後', trend: '上漲', name: '夜星',
+      pre: [[30.0,31.0,31.2,29.8],[31.0,32.1,32.3,30.9],[32.1,33.0,33.2,32.0],[33.0,34.1,34.3,32.9]],
+      key: [[34.1,36.6,36.8,34.0],[37.1,37.3,37.6,36.9],[36.8,34.6,37.0,34.4]],
+      endA: [[34.8,33.6,35.0,33.4],[33.6,32.5,33.7,32.3]],
+      endB: [[35.0,36.2,36.4,34.9],[36.2,37.4,37.6,36.1]],
+      labelA: '走法A：後面兩天下跌', labelB: '走法B：後面兩天又漲回去',
+      textA: '後面兩天繼續收黑，價格往下，這次的警訊對了。',
+      textB: '後面兩天收紅，價格又漲回夜星的最高點附近，這次的警訊沒有用。',
+      keyTexts: [
+        { t: '第一根：長紅K', x: '一天漲了 2.5 元（34.1 到 36.6），買方很強，是上漲的延續。' },
+        { t: '第二根：往上跳空的小實體', x: '開盤直接高於昨天收盤，整根都在昨天的最高價 36.8 之上，但實體只有 0.2 元。買方還在，可是推不動了。' },
+        { t: '第三根：長黑K', x: '收在 34.6 元，低於第一根實體的中點 35.35，把前面兩天的漲幅吐回一大半。' }
+      ],
+      nameTitle: '三根合起來，叫夜星',
+      nameText: '像天黑之前最後亮著的那顆星。出現在一段上漲之後，是可能見頂轉跌的警訊，不是保證。',
+      quiz: {"q": "你手上有 1,000 股，成本 33.0。夜星出現了，第三根收 34.6。你怎麼處理最合理？", "o": ["全部賣掉，夜星一定會跌", "賣一半，剩下的停利設在 34.4 之下", "不用管，夜星只是機率"], "a": 1, "hint": "提示：不用全賣，也不用硬撐。先落袋一部分，其餘讓價格決定。", "fb": ["夜星不保證下跌。全賣之後如果繼續漲，會很後悔。", null, "完全不處理，萬一真的轉跌，前面賺的會吐回去。"], "right": "對。賣 500 股，先鎖住 (34.6 − 33.0) × 500 ＝ 800 元；剩下 500 股停利設在 34.4，跌破才賣，沒跌破就繼續持有。", "lines": [[34.4, "停利 34.4"]]},
+      dataTitle: '這三根 K 線的數字',
+      checks: function (k) {
+        var a = k[0], b = k[1], c = k[2], m = mid(a);
+        return [
+          ['第一根（長紅）', '開 ' + f1(a[0]) + '、收 ' + f1(a[1]) + '，實體 ' + f1(body(a)) + ' 元'],
+          ['第二根（小實體）', '開 ' + f1(b[0]) + '、收 ' + f1(b[1]) + '，實體 ' + f1(body(b)) + ' 元'],
+          ['有沒有往上跳空', '第二根最低 ' + f1(b[3]) + ' 元，高於第一根最高 ' + f1(a[2]) + ' 元，所以整根都在上面'],
+          ['第三根（長黑）', '開 ' + f1(c[0]) + '、收 ' + f1(c[1]) + '，實體 ' + f1(body(c)) + ' 元'],
+          ['第一根實體的中點', '(' + f1(a[0]) + ' ＋ ' + f1(a[1]) + ') ÷ 2 ＝ ' + f2(m) + ' 元'],
+          ['第三根收在哪', f1(c[1]) + ' 元，低於中點 ' + f2(m) + ' 元，跌進第一根實體的一半以下']
+        ];
+      }
+    },
+    harami: {
+      tab: '母子線', sub: '兩根・下跌後', trend: '下跌', name: '母子線',
+      pre: [[60.0,58.9,60.2,58.7],[58.9,57.7,59.0,57.5],[57.7,56.8,57.8,56.6],[56.8,55.6,56.9,55.4],[55.6,54.7,55.7,54.5]],
+      key: [[54.7,51.7,54.9,51.5],[52.6,53.4,53.7,52.3]],
+      endA: [[53.5,54.6,54.8,53.3],[54.6,55.6,55.8,54.5]],
+      endB: [[52.4,51.2,52.6,51.0],[51.2,50.2,51.3,50.0]],
+      labelA: '走法A：後面兩天上漲', labelB: '走法B：後面兩天繼續跌',
+      textA: '後面兩天收紅，價格往上，這次的線索對了。',
+      textB: '後面兩天收黑，價格跌破母親的最低點，這次的線索沒有用。',
+      keyTexts: [
+        { t: '第一根：長黑K，叫「母親」', x: '一天跌了 3.0 元（54.7 到 51.7），實體很大，下跌的力道很強。' },
+        { t: '第二根：小實體，整個躲進母親裡面', x: '實體只有 0.8 元，上下兩端都沒有超出母親的實體。昨天那麼大的力道，今天只剩一點點。' }
+      ],
+      nameTitle: '一大一小，小的被包在大的裡面，叫母子線',
+      nameText: '像媽媽抱著孩子。出現在一段下跌之後，代表下跌的力道變小，是可能止跌的線索，不是保證。',
+      quiz: {"q": "孩子收紅之後，價格回到母親的實體上緣 54.7，你以 54.7 買進。停損價放哪裡最合理？", "o": ["53.0（孩子的實體附近）", "51.5（母親的最低點）", "54.0（買進價下方一點點）"], "a": 1, "hint": "提示：母子線的意思是「51.5 之後賣壓變小」。跌破母親的最低點，就失效了。", "fb": ["53.0 在母親的實體裡面，價格很容易碰到，常被洗出場。", null, "離買進價只有 0.7 元，太近。"], "right": "對。買 54.7、停損 51.5，每股最多賠 3.2 元。每檔最多賠 2,000 元：2,000 ÷ 3.2 ＝ 625 股。", "lines": [[54.7, "買 54.7"], [51.5, "停損 51.5"]]},
+      dataTitle: '這兩根 K 線的數字',
+      checks: function (k) {
+        var m = k[0], c = k[1];
+        return [
+          ['第一根（母親）', '開 ' + f1(m[0]) + '、收 ' + f1(m[1]) + '，實體 ' + f1(body(m)) + ' 元，實體範圍 ' + f1(botB(m)) + ' 到 ' + f1(topB(m))],
+          ['第二根（孩子）', '開 ' + f1(c[0]) + '、收 ' + f1(c[1]) + '，實體 ' + f1(body(c)) + ' 元，實體範圍 ' + f1(botB(c)) + ' 到 ' + f1(topB(c))],
+          ['上緣有沒有超出', f1(topB(c)) + ' 低於母親實體上緣 ' + f1(topB(m))],
+          ['下緣有沒有超出', f1(botB(c)) + ' 高於母親實體下緣 ' + f1(botB(m))],
+          ['孩子是母親的幾成', f1(body(c)) + ' ÷ ' + f1(body(m)) + ' ＝ ' + f2(body(c) / body(m)) + '，約 ' + Math.round(body(c) / body(m) * 100) + '%']
+        ];
+      }
+    },
+    tweezer: {
+      tab: '平底', sub: '兩根・下跌後', trend: '下跌', name: '平底',
+      pre: [[45.0,44.1,45.1,43.9],[44.1,43.2,44.2,43.0],[43.2,42.3,43.3,42.1],[42.3,41.5,42.4,41.3],[41.5,40.7,41.6,40.5]],
+      key: [[40.7,39.8,40.8,39.2],[39.7,40.6,40.8,39.2]],
+      endA: [[40.7,41.6,41.8,40.6],[41.6,42.4,42.6,41.5]],
+      endB: [[39.9,38.9,40.0,38.7],[38.9,38.0,39.0,37.8]],
+      labelA: '走法A：後面兩天上漲', labelB: '走法B：後面跌破這個低點',
+      textA: '後面兩天收紅，價格沒有再碰到 39.2，這次的線索對了。',
+      textB: '後面價格跌破 39.2，這個價位沒有擋住，這次的線索沒有用。',
+      keyTexts: [
+        { t: '第一根：黑K，最低 39.2', x: '收盤 39.8，比開盤 40.7 低。盤中最低跌到 39.2。' },
+        { t: '第二根：紅K，最低又是 39.2', x: '隔天開盤再往下試，又跌到 39.2，然後又被拉回，收在 40.6。同一個價位，連續兩天都跌不下去。' }
+      ],
+      nameTitle: '兩根的最低價相同，叫平底',
+      nameText: '同一個價位擋住兩次，可能有人在這裡接，是可能止跌的線索。它是比較弱的線索，要看價格有沒有真的守住。',
+      quiz: {"q": "隔天價格站上第二根的最高價 40.8，你以 40.8 買進。停損價放哪裡最合理？", "o": ["40.0（買進價下方一點點）", "39.2（兩根共同的最低點）", "35.0（跌超過 14% 才賣）"], "a": 1, "hint": "提示：平底的意思是「39.2 擋了兩次」。跌破它，這個擋點就失效了。", "fb": ["離買進價只有 0.8 元，而且還在兩根 K 線的範圍裡，太容易被洗出場。", null, "買 40.8、停損 35.0，每股賠 5.8 元。每檔最多賠 2,000 元只能買 344 股，真的跌到那裡已經虧一成四。"], "right": "對。買 40.8、停損 39.2，每股最多賠 1.6 元。每檔最多賠 2,000 元：2,000 ÷ 1.6 ＝ 1,250 股，即 1 張又 250 股。", "lines": [[40.8, "買 40.8"], [39.2, "停損 39.2"]]},
+      dataTitle: '這兩根 K 線的數字',
+      checks: function (k) {
+        var a = k[0], b = k[1];
+        return [
+          ['第一根', '開 ' + f1(a[0]) + '、收 ' + f1(a[1]) + '，收盤低於開盤，是黑K；最低 ' + f1(a[3]) + ' 元'],
+          ['第二根', '開 ' + f1(b[0]) + '、收 ' + f1(b[1]) + '，收盤高於開盤，是紅K；最低 ' + f1(b[3]) + ' 元'],
+          ['兩根最低價的差', f1(a[3]) + ' − ' + f1(b[3]) + ' ＝ ' + f1(a[3] - b[3]) + ' 元，最低價相同'],
+          ['要守住的價位', '之後價格如果跌破 ' + f1(b[3]) + ' 元，這個線索就失效']
+        ];
+      }
+    }
+  };
+  var ORDER = ['hammer', 'hang', 'morning', 'evening', 'harami', 'tweezer'];
+  var state = { scene: 'hammer', step: 0, ending: 'A', playing: false, guess: null, seen: {}, wrong: -1 };
+  var timer = null, shown = 0, lastKey = '';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 360, H = 280, L = 34, R = 10, T = 16, B = 20, N = 9;
+  var slot = (W - L - R) / N, bodyW = 18;
+
+  function sc() { return SCENES[state.scene]; }
+  function stepsOf(s) { return s.key.length + 3; }
+  function visibleCount(s, step) {
+    var P = s.pre.length, K = s.key.length;
+    if (step === 0) return P;
+    if (step <= K) return P + step;
+    if (step === K + 1) return P + K;
+    if (!state.seen.A && !state.seen.B) return P + K;
+    return P + K + 2;
+  }
+  function dirOf(s, e) { var end = e === 'A' ? s.endA : s.endB; return end[1][1] > s.key[s.key.length - 1][1] ? 'up' : 'down'; }
+  function allCandles(s) { return s.pre.concat(s.key, state.ending === 'A' ? s.endA : s.endB); }
+
+  function range(s) {
+    var all = s.pre.concat(s.key, s.endA, s.endB), hi = -1e9, lo = 1e9;
+    all.forEach(function (c) { hi = Math.max(hi, c[2]); lo = Math.min(lo, c[3]); });
+    return { hi: Math.ceil(hi + 0.4), lo: Math.floor(lo - 0.4) };
+  }
+
+  function drawChart() {
+    var s = sc(), r = range(s), P = s.pre.length, K = s.key.length;
+    var y = function (p) { return T + (r.hi - p) / (r.hi - r.lo) * (H - T - B); };
+    var visible = visibleCount(s, state.step);
+    var list = allCandles(s).slice(0, visible);
+
+    var key = state.scene + state.ending;
+    var from = key !== lastKey ? 0 : shown;
+    lastKey = key;
+
+    var out = '';
+    var gstep = (r.hi - r.lo) > 10 ? 2 : 1;
+    for (var p = r.lo; p <= r.hi; p += gstep) {
+      out += '<line class="gridline" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(p) + '" y2="' + y(p) + '"/>';
+      out += '<text class="ylabel" x="' + (L - 6) + '" y="' + (y(p) + 3.5) + '" text-anchor="end">' + p + '</text>';
+    }
+    list.forEach(function (c, i) {
+      var o = c[0], cl = c[1], h = c[2], l = c[3];
+      var cx = L + slot * i + slot / 2, up = cl > o;
+      var top = y(Math.max(o, cl)), bot = y(Math.min(o, cl)), bh = Math.max(bot - top, 1.6);
+      out += '<g class="c ' + (up ? 'up' : 'down') + (i >= from ? ' enter' : '') + '" style="--i:' + (i - from) + '">' +
+        '<line x1="' + cx + '" x2="' + cx + '" y1="' + y(h) + '" y2="' + y(l) + '"/>' +
+        '<rect x="' + (cx - bodyW / 2) + '" y="' + top + '" width="' + bodyW + '" height="' + bh + '" rx="1.5"/></g>';
+    });
+    if (state.step >= 1) {
+      var n = Math.min(K, visible - P), seg = s.key.slice(0, n), hi = -1e9, lo = 1e9;
+      seg.forEach(function (c) { hi = Math.max(hi, c[2]); lo = Math.min(lo, c[3]); });
+      out += '<rect class="ring" x="' + (L + slot * P + 1) + '" y="' + (y(hi) - 18) + '" width="' + (slot * n - 2) + '" height="' + (y(lo) - y(hi) + 36) + '" rx="6"/>';
+      if (s.tags && state.step <= K + 1) {
+        var k = s.key[0], kx = L + slot * P + slot / 2;
+        out += '<text class="tag" x="' + kx + '" y="' + (y(k[2]) - 5) + '" text-anchor="middle">高 ' + f1(k[2]) + '</text>';
+        out += '<text class="tag" x="' + kx + '" y="' + (y(k[3]) + 13) + '" text-anchor="middle">低 ' + f1(k[3]) + '</text>';
+      }
+    }
+    if (state.step === K + 2 && state.guess && s.quiz.lines) {
+      s.quiz.lines.forEach(function (ln, idx) {
+        out += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(ln[0]) + '" y2="' + y(ln[0]) + '" style="stroke:' + (idx === 0 && s.quiz.lines.length > 1 ? 'var(--accent)' : 'var(--warn-ink)') + ';stroke-width:1.6;stroke-dasharray:5 3"/>' +
+          '<text class="tag" x="' + (W - R - 2) + '" y="' + (y(ln[0]) - 4) + '" text-anchor="end" style="fill:' + (idx === 0 && s.quiz.lines.length > 1 ? 'var(--accent)' : 'var(--warn-ink)') + '">' + ln[1] + '</text>';
+      });
+    }
+    $('chart').innerHTML = out;
+    $('chart').setAttribute('aria-label', s.name + '示範圖，目前第 ' + (state.step + 1) + ' 步，共 ' + stepsOf(s) + ' 步');
+    shown = visible;
+  }
+
+  function drawText() {
+    var s = sc(), K = s.key.length, S = stepsOf(s), st = state.step;
+    var title, text, note = '';
+    if (st === 0) {
+      title = '先看前面：股價連續' + s.trend;
+      text = s.pre.length + ' 根 K 線，' + (s.trend === '下跌' ? '大多是黑K，價格一路往下。' : '大多是紅K，價格一路往上。');
+    } else if (st <= K) {
+      title = s.keyTexts[st - 1].t; text = s.keyTexts[st - 1].x;
+    } else if (st === K + 1) {
+      title = s.nameTitle; text = s.nameText;
+    } else {
+      var q = s.quiz;
+      if (!state.guess) {
+        title = '實戰：看到它，你會怎麼做？';
+        text = q.q;
+        note = state.wrong >= 0 ? q.fb[state.wrong] : '';
+      } else {
+        title = '這樣做';
+        text = q.right;
+        note = (state.seen.A && state.seen.B) ? '兩種走法前面完全一樣。型態是線索，不是答案。' : '想看後面怎麼走？按下面按鈕。同樣的型態，結果可以不一樣。';
+      }
+    }
+    $('stepLabel').textContent = '步驟 ' + (st + 1) + '／' + S;
+    $('stepTitle').textContent = title;
+    $('stepText').textContent = text;
+    $('note').textContent = note;
+    $('note').hidden = !note;
+    $('guess').hidden = st !== K + 2 || !!state.guess;
+    if (st === K + 2 && !state.guess) {
+      $('guess').innerHTML = s.quiz.o.map(function (t, i) { return '<button class="end" data-i="' + i + '" aria-pressed="' + (state.wrong === i) + '">' + t + '</button>'; }).join('');
+      Array.prototype.forEach.call($('guess').children, function (b) { b.onclick = function () { answer(+b.getAttribute('data-i')); }; });
+    }
+    $('hint').hidden = !(st === K + 2 && !state.guess);
+    $('hint').textContent = s.quiz.hint;
+    $('ends').hidden = !(st === K + 2 && state.guess);
+    var pr = (state.scene === 'hammer' || state.scene === 'hang') && st === K + 1;
+    $('pairWrap').hidden = !pr;
+    if (pr) $('pair').textContent = state.scene === 'hammer' ? '同一個形狀，換到上漲之後會怎樣？→ 看吊人線' : '同一個形狀，換到下跌之後會怎樣？→ 看鎚子線';
+    $('endA').textContent = s.labelA;
+    $('endB').textContent = s.labelB;
+    $('endA').setAttribute('aria-pressed', !!state.seen.A && state.ending === 'A');
+    $('endB').setAttribute('aria-pressed', !!state.seen.B && state.ending === 'B');
+    $('prev').disabled = st === 0;
+    $('next').disabled = st === S - 1;
+    $('play').textContent = state.playing ? '暫停' : (st === S - 1 ? '重播' : '播放');
+    var dots = '';
+    for (var i = 0; i < S; i++) dots += '<span class="' + (i === st ? 'on' : '') + '"></span>';
+    $('dots').innerHTML = dots;
+    ORDER.forEach(function (id) { $('tab-' + id).setAttribute('aria-pressed', state.scene === id); });
+  }
+
+  function drawData() {
+    var s = sc(), K = s.key.length;
+    $('dataCard').hidden = state.step < K;
+    if (state.step < K) return;
+    $('dataTitle').textContent = s.dataTitle;
+    $('dataBody').innerHTML = s.checks(s.key).map(function (r) {
+      return '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>';
+    }).join('');
+  }
+
+  function render() { drawChart(); drawText(); drawData(); }
+  function stop() { state.playing = false; if (timer) { clearInterval(timer); timer = null; } }
+  function go(n) { if (n < stepsOf(sc()) - 1) { state.guess = null; state.seen = {}; state.wrong = -1; } state.step = Math.max(0, Math.min(stepsOf(sc()) - 1, n)); render(); }
+  function play() {
+    if (state.playing) { stop(); render(); return; }
+    if (state.step === stepsOf(sc()) - 1) { state.step = 0; shown = 0; lastKey = ''; state.guess = null; state.seen = {}; state.wrong = -1; }
+    state.playing = true;
+    render();
+    timer = setInterval(function () {
+      if (state.step >= stepsOf(sc()) - 1) { stop(); render(); return; }
+      go(state.step + 1);
+    }, 2600);
+  }
+  function setScene(id) { stop(); state.scene = id; state.step = 0; state.ending = 'A'; lastKey = ''; state.guess = null; state.seen = {}; state.wrong = -1; render(); }
+  function setEnding(e) { state.seen[e] = true; state.ending = e; shown = sc().pre.length + sc().key.length; lastKey = state.scene + e; render(); }
+
+  var tabsHtml = '';
+  ORDER.forEach(function (id) {
+    tabsHtml += '<button class="tab" id="tab-' + id + '" aria-pressed="false">' + SCENES[id].tab + '<small>' + SCENES[id].sub + '</small></button>';
+  });
+  $('tabs').innerHTML = tabsHtml;
+  ORDER.forEach(function (id) { $('tab-' + id).onclick = function () { setScene(id); }; });
+  $('prev').onclick = function () { stop(); go(state.step - 1); };
+  $('next').onclick = function () { stop(); go(state.step + 1); };
+  $('play').onclick = play;
+  function answer(i) {
+    var q = sc().quiz;
+    if (i === q.a) { state.guess = 'ok'; state.wrong = -1; } else { state.wrong = i; }
+    render();
+  }
+  $('pair').onclick = function () { var to = state.scene === 'hammer' ? 'hang' : 'hammer'; setScene(to); go(sc().key.length + 1); };
+  $('endA').onclick = function () { setEnding('A'); };
+  $('endB').onclick = function () { setEnding('B'); };
+
+  render();
+})();
+</script>
+
+</body>
+</html>
