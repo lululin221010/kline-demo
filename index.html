@@ -107,7 +107,7 @@ th { color: var(--muted); font-weight: 500; white-space: nowrap; }
 <div class="wrap">
   <header>
     <h1>六個常見的 K 線型態，一步一步看</h1>
-    <p class="lead">先看前面的走勢，再看型態一根一根長出來，最後每個型態最後有一個實戰例子：看到它之後，買進價、停損價、買幾股，用數字算給你看。答錯會給提示。（每檔最多賠 2,000 元只是舉例）</p>
+    <p class="lead">先看前面的走勢，再看型態一根一根長出來，最後每個型態有一個實戰例子：看到它之後，買進價、停損價、買幾股，用數字算給你看。答錯會給提示。（每檔最多賠 2,000 元只是舉例）</p>
   </header>
 
   <div class="tabs" id="tabs" role="group" aria-label="選擇型態"></div>
@@ -354,8 +354,7 @@ th { color: var(--muted); font-weight: 500; white-space: nowrap; }
     if (step === 0) return P;
     if (step <= K) return P + step;
     if (step === K + 1) return P + K;
-    if (!state.seen.A && !state.seen.B) return P + K;
-    return P + K + 2;
+    return P + K;
   }
   function dirOf(s, e) { var end = e === 'A' ? s.endA : s.endB; return end[1][1] > s.key[s.key.length - 1][1] ? 'up' : 'down'; }
   function allCandles(s) { return s.pre.concat(s.key, state.ending === 'A' ? s.endA : s.endB); }
@@ -430,7 +429,7 @@ th { color: var(--muted); font-weight: 500; white-space: nowrap; }
       } else {
         title = '這樣做';
         text = q.right;
-        note = (state.seen.A && state.seen.B) ? '兩種走法前面完全一樣。型態是線索，不是答案。' : '想看後面怎麼走？按下面按鈕。同樣的型態，結果可以不一樣。';
+        note = '型態只是線索，不是答案。重點是：先決定停損價，再算買幾股。';
       }
     }
     $('stepLabel').textContent = '步驟 ' + (st + 1) + '／' + S;
@@ -445,7 +444,7 @@ th { color: var(--muted); font-weight: 500; white-space: nowrap; }
     }
     $('hint').hidden = !(st === K + 2 && !state.guess);
     $('hint').textContent = s.quiz.hint;
-    $('ends').hidden = !(st === K + 2 && state.guess);
+    $('ends').hidden = true;
     var pr = (state.scene === 'hammer' || state.scene === 'hang') && st === K + 1;
     $('pairWrap').hidden = !pr;
     if (pr) $('pair').textContent = state.scene === 'hammer' ? '同一個形狀，換到上漲之後會怎樣？→ 看吊人線' : '同一個形狀，換到下跌之後會怎樣？→ 看鎚子線';
